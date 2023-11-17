@@ -3,15 +3,12 @@ package io
 import scala.util.{Failure, Success, Try}
 
 final class IO[A](val impureCompute: () => A) {
-  def map[B](f: A => B): IO[B] = new IO(() => f(unsafeRunSync()))
-  def flatMap[B](f: A => IO[B]): IO[B] = new IO(() => {
-    val intermediate: A = unsafeRunSync()
-    f(intermediate).unsafeRunSync()
-  })
+  def map[B](f: A => B): IO[B] = IO(f(unsafeRunSync()))
+  def flatMap[B](f: A => IO[B]): IO[B] = IO(f(unsafeRunSync()).unsafeRunSync())
   def *>[B](another: IO[B]): IO[B] = flatMap(_ => another)
   def as[B](newValue: => B): IO[B] = map(_ => newValue)
   def void: IO[Unit] = map(_ => ())
-  def attempt: IO[Either[Throwable, A]] = new IO(() => Try(unsafeRunSync()).toEither)
+  def attempt: IO[Either[Throwable, A]] = IO(Try(unsafeRunSync()).toEither)
   def option: IO[Option[A]] = attempt.map(_.toOption)
   def handleErrorWith[AA >: A](f: Throwable => IO[AA]): IO[AA] =
     redeemWith(f, IO.pure)
@@ -30,9 +27,9 @@ final class IO[A](val impureCompute: () => A) {
 }
 
 object IO {
-  def apply[A](body: => A): IO[A] = new IO(() => body)
-  def suspend[A](thunk: => IO[A]): IO[A] = thunk
-  def delay[A](body: => A): IO[A] = IO(body)
+  def apply[A](body: => A): IO[A] = IO.delay(body)
+  def suspend[A](thunk: => IO[A]): IO[A] = IO(thunk.unsafeRunSync())
+  def delay[A](body: => A): IO[A] = new IO(() => body)
   def pure[A](a: A): IO[A] = IO(a)
   def fromEither[A](e: Either[Throwable, A]): IO[A] = e match {
     case Left(exception) => IO.raiseError(exception)
