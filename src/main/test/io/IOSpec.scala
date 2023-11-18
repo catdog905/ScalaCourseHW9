@@ -193,15 +193,15 @@ class IOSpec extends AnyFlatSpec with Matchers {
   }
 
   // Stack-safeness tests
-//  "flatMap" should "be stack safe" in {
-//    val largeNumber = 10000
-//
-//    @tailrec
-//    def loop(n: Int, acc: IO[Int]): IO[Int] =
-//      if (n <= 0) acc
-//      else loop(n - 1, acc.flatMap(x => IO(x + 1)))
-//
-//    noException should be thrownBy loop(largeNumber, IO(0)).unsafeRunSync()
-//    loop(largeNumber, IO(0)).unsafeRunSync() should be(largeNumber)
-//  }
+  "flatMap" should "be stack safe" in {
+    val largeNumber = 10000
+
+    @tailrec
+    def loop(n: Int, acc: IO[Int]): IO[Int] =
+      if (n <= 0) acc
+      else loop(n - 1, acc.flatMap(x => IO(x + 1)))
+
+    noException should be thrownBy loop(largeNumber, IO(0)).unsafeRunSync()
+    loop(largeNumber, IO(0)).unsafeRunSync() should be(largeNumber)
+  }
 }

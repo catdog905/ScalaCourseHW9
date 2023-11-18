@@ -1,10 +1,21 @@
 package io
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
-final class IO[A](val impureCompute: () => A) {
+trait ImpureComputation[A]
+
+final case class Pure[A](a: A) extends ImpureComputation[A]
+
+final case class Suspend[A](a: () => A) extends ImpureComputation[A]
+
+final case class FlatMap[A, B](computation: ImpureComputation[A], f: A => IO[B]) extends ImpureComputation[B]
+
+final class IO[A](val impureComputation: ImpureComputation[A]) {
+  self =>
+
   def map[B](f: A => B): IO[B] = IO(f(unsafeRunSync()))
-  def flatMap[B](f: A => IO[B]): IO[B] = IO(f(unsafeRunSync()).unsafeRunSync())
+  def flatMap[B](f: A => IO[B]): IO[B] = new IO(FlatMap(impureComputation, f))
   def *>[B](another: IO[B]): IO[B] = flatMap(_ => another)
   def as[B](newValue: => B): IO[B] = map(_ => newValue)
   def void: IO[Unit] = map(_ => ())
@@ -23,14 +34,28 @@ final class IO[A](val impureCompute: () => A) {
       case Left(throwable) => recover(throwable)
       case Right(value)    => bind(value)
     })
-  def unsafeRunSync(): A = impureCompute()
+  def unsafeRunSync(): A = {
+    @tailrec
+    def recRun(io: IO[A]): A = io.impureComputation match {
+      case Pure(a)    => a
+      case Suspend(a) => a()
+      case FlatMap(computation, f) =>
+        computation match {
+          case Pure(a)     => recRun(f(a))
+          case Suspend(sf) => recRun(f(sf()))
+          case FlatMap(comp2, f2) =>
+            recRun(new IO(FlatMap(comp2, (x: Any) => new IO(FlatMap(f2(x).impureComputation, f)))))
+        }
+    }
+    recRun(self)
+  }
 }
 
 object IO {
   def apply[A](body: => A): IO[A] = IO.delay(body)
   def suspend[A](thunk: => IO[A]): IO[A] = IO(thunk.unsafeRunSync())
-  def delay[A](body: => A): IO[A] = new IO(() => body)
-  def pure[A](a: A): IO[A] = IO(a)
+  def delay[A](body: => A): IO[A] = new IO(Suspend(() => body))
+  def pure[A](a: A): IO[A] = new IO(Pure(a))
   def fromEither[A](e: Either[Throwable, A]): IO[A] = e match {
     case Left(exception) => IO.raiseError(exception)
     case Right(value)    => IO.pure(value)
