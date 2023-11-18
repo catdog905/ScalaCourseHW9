@@ -3,7 +3,7 @@ package io
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
-trait ImpureComputation[A]
+sealed trait ImpureComputation[A]
 
 final case class Pure[A](a: A) extends ImpureComputation[A]
 
